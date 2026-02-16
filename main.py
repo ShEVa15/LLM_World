@@ -43,16 +43,8 @@ async def get_db() -> AsyncSession:
         yield session
 
 
-
-
 @app.post("/agents/", response_model=schemas.AgentResponse, status_code=status.HTTP_201_CREATED)
 async def create_agent(agent: schemas.AgentCreate, db: AsyncSession = Depends(get_db)):
-    """
-    Создаёт нового агента.
-    - **name**: имя агента
-    - **role**: роль агента
-    - **current_mood_score** (опционально): текущее настроение (по умолчанию 0)
-    """
     db_agent = models.Agent(
         name=agent.name,
         role=agent.role,
@@ -67,12 +59,6 @@ async def create_agent(agent: schemas.AgentCreate, db: AsyncSession = Depends(ge
 
 @app.post("/tasks/", response_model=schemas.TaskResponse, status_code=status.HTTP_201_CREATED)
 async def create_task(task: schemas.TaskCreate, db: AsyncSession = Depends(get_db)):
-    """
-    Создаёт новую задачу.
-    - **description**: описание задачи
-    - **status** (опционально): статус (todo, in_progress, done). По умолчанию 'todo'.
-    - **assignee_id** (опционально): ID назначенного агента
-    """
     if task.assignee_id is not None:
         result = await db.execute(select(models.Agent).where(models.Agent.id == task.assignee_id))
         agent = result.scalar_one_or_none()
