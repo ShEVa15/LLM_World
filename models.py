@@ -40,6 +40,7 @@ class Task(Base):
 
 class Relationship(Base):
     __tablename__ = "relationships"
+    
     __table_args__ = (
         UniqueConstraint("agent_1_id", "agent_2_id", name="unique_agent_pair"),
     )

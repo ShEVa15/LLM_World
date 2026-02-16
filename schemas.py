@@ -22,8 +22,11 @@ class TaskBase(BaseModel):
     description: str
     status: Optional[str] = Field(default="todo", pattern="^(todo|in_progress|done)$")  
 
+
 class TaskCreate(TaskBase):
     assignee_id: Optional[int] = None 
+
+    
 class TaskResponse(TaskBase):
     id: int
     assignee_id: Optional[int] = None
