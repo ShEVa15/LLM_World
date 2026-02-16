@@ -36,7 +36,7 @@ class ConnectionManager:
 manager = ConnectionManager()
 
 async def mock_agent_brain(task_description: str):
-    await asyncio.sleep(3)  # типа думает
+    await asyncio.sleep(3)  # типо думает
     return {"reply": "Понял, делаю!", "mood_change": -2}  # всегда отвечает так
 
 @asynccontextmanager
@@ -57,12 +57,12 @@ app.add_middleware(
     allow_credentials=True,
 )
 
-# -------------------- Зависимость БД --------------------
+
 async def get_db() -> AsyncSession:
     async with AsyncSessionLocal() as session:
         yield session
 
-# -------------------- REST Эндпоинты --------------------
+
 
 @app.post("/agents/", response_model=schemas.AgentResponse, status_code=201)
 async def create_agent(agent: schemas.AgentCreate, db: AsyncSession = Depends(get_db)):
@@ -95,7 +95,7 @@ async def websocket_endpoint(websocket: WebSocket):
     await manager.connect(websocket)
     try:
         while True:
-            await websocket.receive_text()  # ждём, пока клиент не отключится
+            await websocket.receive_text()  # ждём пока клиент не отключится
     except WebSocketDisconnect:
         manager.disconnect(websocket)
 
@@ -104,12 +104,6 @@ async def websocket_endpoint(websocket: WebSocket):
 async def assign_task(task_id: int, agent_id: int,
                       background_tasks: BackgroundTasks,
                       db: AsyncSession = Depends(get_db)):
-    """
-    Назначает задачу агенту.
-    - Моментально отвечает {"status": "processing"}
-    - В фоне запускает обработку (имитация работы мозга)
-    """
-    # Проверим, что задача и агент существуют (чтобы не ошибиться в фоне)
     task = await db.get(models.Task, task_id)
     if not task:
         raise HTTPException(404, "Task not found")
@@ -117,26 +111,26 @@ async def assign_task(task_id: int, agent_id: int,
     if not agent:
         raise HTTPException(404, "Agent not found")
 
-    # Добавляем фоновую задачу – она выполнится ПОСЛЕ отправки ответа
+
     background_tasks.add_task(
         process_agent_assignment,
         task_id, agent_id, task.description
     )
     return {"status": "processing"}
 
-# Фоновая функция (не зависит от request, поэтому использует свою сессию БД)
-async def process_agent_assignment(task_id: int, agent_id: int, task_description: str):
-    # 1. Имитация работы мозга
-    result = await mock_agent_brain(task_description)
 
-    # 2. Обновляем настроение агента в отдельной сессии
+async def process_agent_assignment(task_id: int, agent_id: int, task_description: str):
+
+    result = await mock_agent_brain(task_description) 
+
+
     async with AsyncSessionLocal() as db:
         agent = await db.get(models.Agent, agent_id)
-        if agent:  # агент всё ещё существует?
+        if agent:  # если агент все ещё есть
             agent.current_mood_score += result["mood_change"]
             await db.commit()
 
-            # 3. Оповещаем всех через WebSocket
+
             await manager.broadcast({
                 "event": "agent_action",
                 "agent_id": agent_id,
