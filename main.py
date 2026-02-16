@@ -15,7 +15,6 @@ app = FastAPI(
     title="Agents API",
     description="API для управления агентами, задачами и отношениями",
     version="0.0.1",
-    lifespan=lifespan,
 )
 
 
