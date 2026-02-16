@@ -89,7 +89,7 @@ async def list_agents(db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(models.Agent))
     return result.scalars().all()
 
-# -------------------- WebSocket --------------------
+
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await manager.connect(websocket)
@@ -99,7 +99,7 @@ async def websocket_endpoint(websocket: WebSocket):
     except WebSocketDisconnect:
         manager.disconnect(websocket)
 
-# -------------------- NEW: Задание с фоновой задачей --------------------
+
 @app.post("/tasks/{task_id}/assign/{agent_id}")
 async def assign_task(task_id: int, agent_id: int,
                       background_tasks: BackgroundTasks,
