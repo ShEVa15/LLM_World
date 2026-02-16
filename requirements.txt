@@ -1,3 +1,5 @@
+fastapi
+uvicorn
 streamlit
-yandexgptlite
+requests
 python-dotenv

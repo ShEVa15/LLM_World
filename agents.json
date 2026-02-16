@@ -1,3 +1,16 @@
 [
-  {}
+  {
+    "id": "greg",
+    "name": "Грег",
+    "personality": "Циник-технарь, ворчливый, но справедливый",
+    "base_mood": 0.4,
+    "relations": {"lucy": -0.3, "morpheus": 0.2, "zara": 0.4}
+  },
+  {
+    "id": "lucy",
+    "name": "Люси",
+    "personality": "Энергичная оптимистка, любит организовывать",
+    "base_mood": 0.8,
+    "relations": {"greg": 0.1, "morpheus": -0.1, "zara": 0.5}
+  }
 ]
