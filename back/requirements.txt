@@ -1,0 +1,3 @@
+streamlit
+yandexgptlite
+python-dotenv
