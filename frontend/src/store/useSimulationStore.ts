@@ -6,20 +6,58 @@ import {
   SIMULATION_START_TIME,
   SIMULATION_END_TIME,
 } from "../constants/initialData";
+import { buildAgentPrompt } from "../api/promptBuilder";
+import { SocketManager } from "../api/socketManager";
+// === КООРДИНАТЫ ЗОН ===
+const ZONES = {
+  COFFEE: { x: 100, y: 250 },
+  PIZZA: { x: 250, y: 150 }, // Район между овальным столом и левым верхним углом
+};
+
+// Смещение для рассадки ТРЕУГОЛЬНИКОМ во время пиццы
+const PIZZA_OFFSETS: Record<string, { x: number; y: number }> = {
+  ockham: { x: 0, y: -25 }, // Вершина треугольника (сверху)
+  christina: { x: -25, y: 20 }, // Левый нижний угол
+  darius: { x: 25, y: 20 }, // Правый нижний угол
+};
 
 const RANDOM_EVENTS: GameEvent[] = [
   {
     id: "prod_down",
     icon: "🔥",
     title: "Упал ПРОД!",
-    desc: "Ошибка в конфигурации CORS положила сервер. Макс должен срочно все бросить и поднять базу.",
+    desc: "Сработал OOM Killer, база данных легла. Оккам должен срочно восстановить репликацию.",
     glowColor: "bg-rose-500",
     titleColor: "text-rose-400",
-    effectText:
-      '🔴 Макс: Бросает текущую работу. Статус "Чинит Прод". Стресс +40%. Занят на 1 час.',
-    targetAgent: "max",
+    effectText: "🔴 Оккам: Бежит в серверную. Стресс +40%. Занят на 1 час.",
+    targetAgent: "ockham",
     durationMins: 60,
     stressPenalty: 40,
+  },
+  {
+    id: "ui_broken",
+    icon: "💥",
+    title: "Сломалась верстка",
+    desc: "Заказчик открыл сайт в старом Safari. Все флексбоксы поехали. Кристина в ярости.",
+    glowColor: "bg-yellow-500",
+    titleColor: "text-yellow-400",
+    effectText:
+      "🟡 Кристина: Разбирается с багом. Стресс +35%. Занята на 45 мин.",
+    targetAgent: "christina",
+    durationMins: 45,
+    stressPenalty: 35,
+  },
+  {
+    id: "pipeline_failed",
+    icon: "⛔",
+    title: "Пайплайн покраснел",
+    desc: "Кто-то случайно запушил секретные ключи. Дариус пошел отзывать доступы.",
+    glowColor: "bg-rose-500",
+    titleColor: "text-rose-400",
+    effectText: "🔴 Дариус: Блокирует доступы. Стресс +35%. Занят на 50 мин.",
+    targetAgent: "darius",
+    durationMins: 50,
+    stressPenalty: 35,
   },
   {
     id: "pizza_time",
@@ -32,19 +70,6 @@ const RANDOM_EVENTS: GameEvent[] = [
     targetAgent: null,
     durationMins: 0,
     stressPenalty: 0,
-  },
-  {
-    id: "merge_conflict",
-    icon: "⚔️",
-    title: "Merge Конфликт",
-    desc: "Рин случайно затерла чужие стили в Tailwind. Придется потратить время на ручной резолв конфликтов в Git.",
-    glowColor: "bg-yellow-500",
-    titleColor: "text-yellow-400",
-    effectText:
-      '🟡 Рин: Бросает работу. Статус "Резолвит Git". Стресс +15%. Занята на 30 мин.',
-    targetAgent: "rin",
-    durationMins: 30,
-    stressPenalty: 15,
   },
 ];
 
@@ -69,27 +94,14 @@ interface SimulationState {
     agentKey: string,
   ) => void;
   resolveEvent: () => void;
+
+  // Функции для API Бэкенда
   addMessage: (text: string, senderId: string) => void;
   updateAgentState: (agentKey: string, updates: Partial<Agent>) => void;
   updateTaskState: (taskId: string, updates: Partial<Task>) => void;
 }
 
 export const useSimulationStore = create<SimulationState>((set, get) => ({
-  updateAgentState: (agentKey, updates) =>
-    set((state) => ({
-      agents: {
-        ...state.agents,
-        [agentKey]: { ...state.agents[agentKey], ...updates },
-      },
-    })),
-
-  updateTaskState: (taskId, updates) =>
-    set((state) => ({
-      tasks: {
-        ...state.tasks,
-        [taskId]: { ...state.tasks[taskId], ...updates },
-      },
-    })),
   simMinutes: SIMULATION_START_TIME,
   isPaused: false,
   agents: INITIAL_AGENTS,
@@ -97,7 +109,7 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
   messages: [
     {
       id: "sys-start",
-      text: "Система инициализирована. Агенты готовы к работе.",
+      text: "Система инициализирована. Агенты на позициях.",
       senderId: "system",
       timestamp: SIMULATION_START_TIME,
     },
@@ -118,6 +130,22 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
           timestamp: state.simMinutes,
         },
       ],
+    })),
+
+  updateAgentState: (agentKey, updates) =>
+    set((state) => ({
+      agents: {
+        ...state.agents,
+        [agentKey]: { ...state.agents[agentKey], ...updates },
+      },
+    })),
+
+  updateTaskState: (taskId, updates) =>
+    set((state) => ({
+      tasks: {
+        ...state.tasks,
+        [taskId]: { ...state.tasks[taskId], ...updates },
+      },
     })),
 
   tick: () => {
@@ -143,7 +171,7 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
             agent.status = "IDLE";
             agent.busyUntil = 0;
             agent.currentTaskId = null;
-            agent.position = agent.basePosition;
+            agent.position = agent.basePosition; // Возврат на рабочее место после задачи
           } else if (agent.status === "RESTING") {
             if (agent.currentTaskId && updatedTasks[agent.currentTaskId]) {
               const task = updatedTasks[agent.currentTaskId];
@@ -151,13 +179,13 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
                 agent.status = "WORKING";
                 agent.busyUntil =
                   nextMinutes + (task.durationMins - task.progressMins);
-                agent.position = agent.basePosition;
+                agent.position = agent.basePosition; // Возврат к столу с перерыва
                 task.status = "IN_PROGRESS";
               }
             } else {
               agent.status = "IDLE";
               agent.busyUntil = 0;
-              agent.position = agent.basePosition;
+              agent.position = agent.basePosition; // Возврат к столу с перерыва
             }
           }
         }
@@ -172,13 +200,13 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
             task.assignedAgentId = null;
           }
           agent.currentTaskId = null;
-          agent.position = agent.basePosition;
+          agent.position = agent.basePosition; // При выгорании агент садится за стол и зависает
         }
       });
 
       let newActiveEvent = state.activeEvent;
       let newIsPaused = state.isPaused;
-      if (!newIsPaused && !newActiveEvent && Math.random() < 0.02) {
+      if (!newIsPaused && !newActiveEvent && Math.random() < 0.01) {
         newActiveEvent =
           RANDOM_EVENTS[Math.floor(Math.random() * RANDOM_EVENTS.length)];
         newIsPaused = true;
@@ -214,7 +242,7 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
             currentTaskId: taskId,
             busyUntil:
               state.simMinutes + (task.durationMins - task.progressMins),
-            position: agent.basePosition,
+            position: agent.basePosition, // Работаем за своим столом
           },
         },
         tasks: {
@@ -249,20 +277,40 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
         };
       }
 
+      // === ПРАВИЛЬНАЯ ПРИВЯЗКА К КАРТЕ ===
       if (eventType === "coffee") {
         updates.status = "RESTING";
         updates.stress = Math.max(0, agent.stress - 15);
         updates.busyUntil = state.simMinutes + 15;
-        updates.position = { x: 65, y: 325 };
+        // Добавим легкий разброс, чтобы не слипались у кофе-машины
+        updates.position = {
+          x: ZONES.COFFEE.x,
+          y: ZONES.COFFEE.y + Math.random() * 40,
+        };
       } else if (eventType === "lounge") {
         updates.status = "RESTING";
         updates.stress = Math.max(0, agent.stress - 40);
         updates.busyUntil = state.simMinutes + 60;
-        updates.position = { x: 380, y: 40 };
+
+        // Локальные оффсеты для идеального треугольника
+        const offsets: Record<string, { x: number; y: number }> = {
+          ockham: { x: 0, y: -25 }, // Вершина (сверху)
+          christina: { x: -25, y: 20 }, // Левый нижний
+          darius: { x: 25, y: 20 }, // Правый нижний
+        };
+        const offset = offsets[agentKey] || { x: 0, y: 0 };
+
+        // ИСПОЛЬЗУЕМ ZONES.PIZZA вместо ZONES.LOUNGE
+        updates.position = {
+          x: ZONES.PIZZA.x + offset.x,
+          y: ZONES.PIZZA.y + offset.y,
+        };
       } else if (eventType === "work") {
         updates.status = "IDLE";
         updates.busyUntil = 0;
+        updates.position = agent.basePosition; // ИСПРАВЛЕНИЕ: Возвращаем агента за стол!
       }
+
       return {
         agents: { ...state.agents, [agentKey]: updates },
         tasks: taskUpdates,
@@ -279,27 +327,25 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
       const incidentId = `inc-${Date.now()}`;
 
       if (!ev.targetAgent) {
+        // ГЛОБАЛЬНЫЙ ИВЕНТ (ПИЦЦА) - Рассадка треугольником
         Object.keys(updatedAgents).forEach((key) => {
-          updatedAgents[key].stress = Math.max(
-            0,
-            updatedAgents[key].stress - 20,
-          );
+          if (updatedAgents[key].status !== "ERROR") {
+            updatedAgents[key].status = "RESTING";
+            updatedAgents[key].stress = Math.max(
+              0,
+              updatedAgents[key].stress - 20,
+            );
+            updatedAgents[key].busyUntil = state.simMinutes + 30; // Едят 30 минут
+
+            const offset = PIZZA_OFFSETS[key] || { x: 0, y: 0 };
+            updatedAgents[key].position = {
+              x: ZONES.PIZZA.x + offset.x,
+              y: ZONES.PIZZA.y + offset.y,
+            };
+          }
         });
-        updatedTasks[incidentId] = {
-          id: incidentId,
-          title: ev.title,
-          difficulty: "EASY",
-          description: ev.desc,
-          tags: ["Бафф"],
-          durationMins: 0,
-          stressPenalty: 0,
-          status: "DONE",
-          assignedAgentId: null,
-          progressMins: 0,
-          isIncident: true,
-          icon: ev.icon,
-        };
       } else {
+        // ОДИНОЧНЫЙ ИНЦИДЕНТ (Упал прод, сломалась верстка и т.д.)
         const agent = updatedAgents[ev.targetAgent];
 
         if (agent.status === "WORKING" && agent.currentTaskId) {
@@ -334,7 +380,15 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
         agent.status = "WORKING";
         agent.currentTaskId = incidentId;
         agent.busyUntil = state.simMinutes + ev.durationMins;
+
+        // ИСПРАВЛЕНИЕ: При инциденте агент остается на своем рабочем месте!
         agent.position = agent.basePosition;
+        const promptText = buildAgentPrompt(
+          agent,
+          updatedTasks[incidentId],
+          `${ev.title}: ${ev.desc}`,
+        );
+        SocketManager.sendLlmRequest(agent.id, promptText);
       }
 
       return {
