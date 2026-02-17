@@ -33,8 +33,8 @@ export interface Task {
   status: TaskStatus;
   assignedAgentId: string | null;
   progressMins: number;
-  isIncident?: boolean; // <-- Флаг для красных карточек
-  icon?: string; // <-- Иконка ивента
+  isIncident?: boolean;
+  icon?: string;
 }
 
 export interface GameEvent {
@@ -48,4 +48,12 @@ export interface GameEvent {
   targetAgent: string | null;
   durationMins: number;
   stressPenalty: number;
+}
+
+// === НОВЫЙ ТИП ДЛЯ ЧАТА ===
+export interface Message {
+  id: string;
+  text: string;
+  senderId: "user" | "system" | string; // string - это ключ агента (max, rin)
+  timestamp: number; // Игровое время в минутах
 }

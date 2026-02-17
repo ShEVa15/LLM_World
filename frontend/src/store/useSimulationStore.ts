@@ -1,5 +1,5 @@
 import { create } from "zustand";
-import type { Agent, Task, GameEvent } from "../types";
+import type { Agent, Task, GameEvent, Message } from "../types";
 import {
   INITIAL_AGENTS,
   INITIAL_TASKS,
@@ -53,6 +53,7 @@ interface SimulationState {
   isPaused: boolean;
   agents: Record<string, Agent>;
   tasks: Record<string, Task>;
+  messages: Message[];
   activeTab: "chat" | "tasks" | "map";
   isInspectorOpen: boolean;
   selectedAgentId: string | null;
@@ -68,17 +69,56 @@ interface SimulationState {
     agentKey: string,
   ) => void;
   resolveEvent: () => void;
+  addMessage: (text: string, senderId: string) => void;
+  updateAgentState: (agentKey: string, updates: Partial<Agent>) => void;
+  updateTaskState: (taskId: string, updates: Partial<Task>) => void;
 }
 
 export const useSimulationStore = create<SimulationState>((set, get) => ({
+  updateAgentState: (agentKey, updates) =>
+    set((state) => ({
+      agents: {
+        ...state.agents,
+        [agentKey]: { ...state.agents[agentKey], ...updates },
+      },
+    })),
+
+  updateTaskState: (taskId, updates) =>
+    set((state) => ({
+      tasks: {
+        ...state.tasks,
+        [taskId]: { ...state.tasks[taskId], ...updates },
+      },
+    })),
   simMinutes: SIMULATION_START_TIME,
   isPaused: false,
   agents: INITIAL_AGENTS,
   tasks: INITIAL_TASKS,
+  messages: [
+    {
+      id: "sys-start",
+      text: "Система инициализирована. Агенты готовы к работе.",
+      senderId: "system",
+      timestamp: SIMULATION_START_TIME,
+    },
+  ],
   activeTab: "map",
   isInspectorOpen: false,
   selectedAgentId: null,
   activeEvent: null,
+
+  addMessage: (text, senderId) =>
+    set((state) => ({
+      messages: [
+        ...state.messages,
+        {
+          id: `msg-${Date.now()}-${Math.random()}`,
+          text,
+          senderId,
+          timestamp: state.simMinutes,
+        },
+      ],
+    })),
 
   tick: () => {
     const state = get();
@@ -129,7 +169,7 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
             const timeRemaining = agent.busyUntil - state.simMinutes;
             task.progressMins = Math.max(0, task.durationMins - timeRemaining);
             task.status = "PAUSED";
-            task.assignedAgentId = null; // ИСПРАВЛЕНИЕ: Освобождаем задачу
+            task.assignedAgentId = null;
           }
           agent.currentTaskId = null;
           agent.position = agent.basePosition;
@@ -264,7 +304,6 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
 
         if (agent.status === "WORKING" && agent.currentTaskId) {
           const task = updatedTasks[agent.currentTaskId];
-          // ИСПРАВЛЕНИЕ: assignedAgentId: null, чтобы задачу можно было переназначить!
           updatedTasks[agent.currentTaskId] = {
             ...task,
             status: "PAUSED",
