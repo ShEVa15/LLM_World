@@ -2,7 +2,6 @@ import { useMemo } from "react";
 import { useSimulationStore } from "../store/useSimulationStore";
 import ForceGraph2D from "react-force-graph-2d";
 
-// 1. Описываем, как выглядит Узел (точка на графе)
 interface GraphNode {
   id: string;
   name: string;
@@ -10,7 +9,6 @@ interface GraphNode {
   val: number;
 }
 
-// 2. Описываем, как выглядит Связь (линия на графе)
 interface GraphLink {
   source: string;
   target: string;
@@ -59,17 +57,14 @@ export default function InspectorPanel() {
     }
   }
 
-  // === ГЕНЕРАЦИЯ ДАННЫХ ДЛЯ ГРАФА ===
   const graphData = useMemo(() => {
     const nodes: GraphNode[] = [];
     const links: GraphLink[] = [];
 
-    // Добавляем Агентов
     Object.values(agents).forEach((a) => {
       nodes.push({ id: a.id, name: a.name, color: a.color, val: 20 });
     });
 
-    // Добавляем Активные задачи и связи к ним
     Object.values(tasks).forEach((t) => {
       if (t.status === "IN_PROGRESS" || t.status === "PAUSED") {
         nodes.push({
@@ -118,8 +113,8 @@ export default function InspectorPanel() {
         </div>
       </div>
 
-      <div className="flex-1 flex flex-col">
-        <div className="px-6 py-4 bg-slate-800/30 border-b border-slate-700/50 flex justify-between items-center">
+      <div className="flex-1 flex flex-col min-h-0">
+        <div className="px-6 py-4 bg-slate-800/30 border-b border-slate-700/50 flex justify-between items-center flex-shrink-0">
           <span className="text-xs uppercase font-bold text-slate-300">
             Профиль Агента
           </span>
@@ -136,19 +131,18 @@ export default function InspectorPanel() {
         </div>
 
         <div
-          className={`flex-1 p-6 overflow-y-auto flex flex-col ${
-            !agent ? "justify-center items-center text-center" : ""
-          }`}
+          className={`flex-1 p-6 overflow-y-auto custom-scrollbar flex flex-col ${!agent ? "justify-center items-center text-center" : ""}`}
         >
           {!agent ? (
             <span className="text-slate-500 text-sm">
-              Выберите агента для загрузки данных.
+              Выберите агента на карте для загрузки данных.
             </span>
           ) : (
-            <div className="w-full text-left space-y-6 fade-in">
+            <div className="w-full text-left space-y-5 fade-in pb-8">
+              {/* Шапка профиля */}
               <div className="flex items-center gap-4">
                 <div
-                  className="w-16 h-16 rounded-2xl border-2 p-1 bg-slate-800 shadow-lg relative"
+                  className="w-16 h-16 rounded-2xl border-2 p-1 bg-slate-800 shadow-lg relative flex-shrink-0"
                   style={{ borderColor: agent.color }}
                 >
                   <img
@@ -172,6 +166,7 @@ export default function InspectorPanel() {
                 </div>
               </div>
 
+              {/* Стресс */}
               <div className="bg-slate-900/80 border border-slate-700/50 rounded-xl p-4 shadow-inner">
                 <div className="flex justify-between items-center mb-2">
                   <p className="text-[10px] uppercase text-slate-500 font-bold tracking-wider">
@@ -191,6 +186,7 @@ export default function InspectorPanel() {
                 </div>
               </div>
 
+              {/* Текущий процесс */}
               <div className="bg-slate-900/80 border border-slate-700/50 rounded-xl p-4">
                 <p className="text-[10px] uppercase text-slate-500 font-bold mb-2 tracking-wider">
                   Текущий процесс
@@ -205,6 +201,52 @@ export default function InspectorPanel() {
                   ></span>
                   &gt; {currentProcess}
                 </p>
+              </div>
+
+              {/* СЕКРЕТНОЕ ДОСЬЕ (Новый блок) */}
+              <div className="bg-slate-900/80 border border-slate-700/50 rounded-xl p-4 space-y-4">
+                <h3 className="text-[10px] uppercase text-slate-500 font-bold tracking-wider border-b border-slate-700/50 pb-2">
+                  Секретное Досье
+                </h3>
+
+                <div>
+                  <p className="text-[9px] text-slate-500 font-mono uppercase">
+                    Специализация
+                  </p>
+                  <p className="text-xs text-slate-300 mt-1 leading-relaxed">
+                    {agent.specialization}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-[9px] text-slate-500 font-mono uppercase">
+                    Характер
+                  </p>
+                  <p className="text-xs text-slate-300 mt-1 leading-relaxed">
+                    {agent.temperament}
+                  </p>
+                </div>
+
+                <div>
+                  <p className="text-[9px] text-slate-500 font-mono uppercase">
+                    Коронная фраза
+                  </p>
+                  <p
+                    className="text-xs font-mono mt-1"
+                    style={{ color: agent.color }}
+                  >
+                    "{agent.catchphrase}"
+                  </p>
+                </div>
+
+                <div className="bg-rose-950/30 p-2 rounded-lg border border-rose-900/30">
+                  <p className="text-[9px] text-rose-500/70 font-mono uppercase flex items-center gap-1">
+                    <span>⚠️</span> Критический триггер
+                  </p>
+                  <p className="text-xs text-rose-300/90 mt-1 leading-relaxed">
+                    {agent.trigger}
+                  </p>
+                </div>
               </div>
             </div>
           )}

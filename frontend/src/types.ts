@@ -20,6 +20,12 @@ export interface Agent {
   basePosition: Coordinates;
   currentTaskId: string | null;
   busyUntil: number;
+
+  // === НОВЫЕ ПОЛЯ ДЛЯ ЛОРА (Инспектор) ===
+  specialization: string;
+  temperament: string;
+  catchphrase: string;
+  trigger: string;
 }
 
 export interface Task {
@@ -50,10 +56,9 @@ export interface GameEvent {
   stressPenalty: number;
 }
 
-// === НОВЫЙ ТИП ДЛЯ ЧАТА ===
 export interface Message {
   id: string;
   text: string;
-  senderId: "user" | "system" | string; // string - это ключ агента (max, rin)
-  timestamp: number; // Игровое время в минутах
+  senderId: "user" | "system" | string;
+  timestamp: number;
 }
