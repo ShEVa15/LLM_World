@@ -2,13 +2,13 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from typing import Optional
 from datetime import datetime
 
+# ----- Agent -----
 class AgentBase(BaseModel):
     name: str
     role: str
 
 class AgentCreate(AgentBase):
-    current_mood_score: Optional[int] = Field(default=0, ge=-100, le=100)  # диапазон
-
+    current_mood_score: Optional[int] = Field(default=0, ge=-100, le=100)
 
 class AgentResponse(AgentBase):
     id: int
@@ -16,25 +16,22 @@ class AgentResponse(AgentBase):
 
     model_config = ConfigDict(from_attributes=True)
 
-
-
+# ----- Task -----
 class TaskBase(BaseModel):
     description: str
-    status: Optional[str] = Field(default="todo", pattern="^(todo|in_progress|done)$")  
+    status: Optional[str] = Field(default="todo", pattern="^(todo|in_progress|done)$")
 
 
 class TaskCreate(TaskBase):
-    assignee_id: Optional[int] = None 
+    assignee_id: Optional[int] = None
 
-    
 class TaskResponse(TaskBase):
     id: int
     assignee_id: Optional[int] = None
-
+    
     model_config = ConfigDict(from_attributes=True)
 
-
-
+# ----- Relationship -----
 class RelationshipBase(BaseModel):
     agent_1_id: int
     agent_2_id: int
@@ -51,6 +48,19 @@ class RelationshipCreate(RelationshipBase):
 
 class RelationshipResponse(RelationshipBase):
     id: int
-
     model_config = ConfigDict(from_attributes=True)
 
+# ----- Message -----
+class MessageBase(BaseModel):
+    content: str
+    recipient_id: Optional[int] = None   # если None – сообщение для всех
+
+class MessageCreate(MessageBase):
+    pass
+
+class MessageResponse(MessageBase):
+    id: int
+    sender_type: str
+    sender_id: Optional[int]
+    timestamp: datetime
+    model_config = ConfigDict(from_attributes=True)

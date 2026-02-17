@@ -24,7 +24,8 @@ class Agent(Base):
         back_populates="agent2",
         cascade="all, delete-orphan"
     )
-
+    # Связь с сообщениями, где агент является отправителем
+    sent_messages = relationship("Message", foreign_keys="Message.sender_id", back_populates="sender")
 
 class Task(Base):
     __tablename__ = "tasks"
@@ -35,7 +36,6 @@ class Task(Base):
     assignee_id = Column(Integer, ForeignKey("agents.id"))
 
     assignee = relationship("Agent", back_populates="tasks")
-
 
 class Relationship(Base):
     __tablename__ = "relationships"
@@ -52,3 +52,14 @@ class Relationship(Base):
     agent1 = relationship("Agent", foreign_keys=[agent_1_id], back_populates="relationships_as_agent1")
     agent2 = relationship("Agent", foreign_keys=[agent_2_id], back_populates="relationships_as_agent2")
 
+class Message(Base):
+    __tablename__ = "messages"
+
+    id = Column(Integer, primary_key=True, index=True)
+    content = Column(String, nullable=False)
+    sender_type = Column(String, nullable=False)          # "user" или "agent"
+    sender_id = Column(Integer, ForeignKey("agents.id"), nullable=True)  # null для user
+    recipient_id = Column(Integer, ForeignKey("agents.id"), nullable=True) # null = всем
+    timestamp = Column(DateTime, default=datetime.utcnow)
+
+    sender = relationship("Agent", foreign_keys=[sender_id], back_populates="sent_messages")
