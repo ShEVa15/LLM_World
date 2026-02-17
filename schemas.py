@@ -1,55 +1,37 @@
-from pydantic import BaseModel, ConfigDict, Field, field_validator
-from typing import Optional
+from pydantic import BaseModel
+from typing import Optional, List
 
+class TaskBase(BaseModel):
+    title: str
+    description: Optional[str] = None
+    assignee_id: Optional[int] = None
+
+class TaskCreate(TaskBase):
+    pass
+
+class TaskResponse(TaskBase):
+    id: int
+    is_completed: bool
+    class Config:
+        from_attributes = True
 
 class AgentBase(BaseModel):
     name: str
     role: str
+    skills: str = ""
 
 class AgentCreate(AgentBase):
-    current_mood_score: Optional[int] = Field(default=0, ge=-100, le=100)  # диапазон
-
+    pass
 
 class AgentResponse(AgentBase):
     id: int
-    current_mood_score: int
-
-    model_config = ConfigDict(from_attributes=True)
-
-
-
-class TaskBase(BaseModel):
-    description: str
-    status: Optional[str] = Field(default="todo", pattern="^(todo|in_progress|done)$")  
-
-
-class TaskCreate(TaskBase):
-    assignee_id: Optional[int] = None 
-
+    status: str
+    current_mood_score: float
+    coord_x: int
+    coord_y: int
     
-class TaskResponse(TaskBase):
-    id: int
-    assignee_id: Optional[int] = None
+    # 👇 Отправляем на фронт готовый текст активности
+    current_activity: Optional[str] = "Свободен" 
 
-    model_config = ConfigDict(from_attributes=True)
-
-
-
-class RelationshipBase(BaseModel):
-    agent_1_id: int
-    agent_2_id: int
-    affinity_score: Optional[int] = Field(default=0, ge=-100, le=100)
-
-
-class RelationshipCreate(RelationshipBase):
-    @field_validator('agent_2_id')
-    def check_not_same_agent(cls, v, info):
-        if 'agent_1_id' in info.data and v == info.data['agent_1_id']:
-            raise ValueError('agent_1_id and agent_2_id must be different')
-        return v
-
-
-class RelationshipResponse(RelationshipBase):
-    id: int
-
-    model_config = ConfigDict(from_attributes=True)
+    class Config:
+        from_attributes = True
