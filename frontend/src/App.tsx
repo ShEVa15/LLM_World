@@ -1,3 +1,5 @@
+import { useEffect } from "react";
+import { SocketManager } from "./api/socketManager";
 import { useSimulationStore } from "./store/useSimulationStore";
 import { useSimulationTime } from "./hooks/useSimulationTime";
 import MapView from "./components/MapView";
@@ -9,6 +11,18 @@ import ChatView from "./components/ChatView";
 export default function App() {
   // Запускаем время
   useSimulationTime();
+
+  // === НОВЫЙ БЛОК: Подключение к WebSocket при старте ===
+  useEffect(() => {
+    // Стучимся к бэкендерам по дефолтному порту 8000
+    const socket = SocketManager.connect("ws://localhost:8000/ws");
+
+    // Корректно закрываем соединение, если компонент размонтируется
+    return () => {
+      socket.close();
+    };
+  }, []);
+  // =======================================================
 
   const {
     activeTab,
