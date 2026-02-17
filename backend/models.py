@@ -1,65 +1,31 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, UniqueConstraint, DateTime
-from sqlalchemy.orm import relationship
+from sqlalchemy import Column, Integer, String, Float, Boolean
 from database import Base
-from datetime import datetime
 
 class Agent(Base):
     __tablename__ = "agents"
 
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, nullable=False)
-    role = Column(String, nullable=False)
-    current_mood_score = Column(Integer, default=0)
-
-    tasks = relationship("Task", back_populates="assignee", cascade="all, delete-orphan")
-    relationships_as_agent1 = relationship(
-        "Relationship",
-        foreign_keys="Relationship.agent_1_id",
-        back_populates="agent1",
-        cascade="all, delete-orphan"
-    )
-    relationships_as_agent2 = relationship(
-        "Relationship",
-        foreign_keys="Relationship.agent_2_id",
-        back_populates="agent2",
-        cascade="all, delete-orphan"
-    )
-    # Связь с сообщениями, где агент является отправителем
-    sent_messages = relationship("Message", foreign_keys="Message.sender_id", back_populates="sender")
+    name = Column(String)
+    role = Column(String)
+    skills = Column(String, default="")
+    
+    # Состояния
+    status = Column(String, default="IDLE") # IDLE, WORKING, RESTING, ERROR, INCIDENT
+    current_activity = Column(String, default="Свободен")
+    
+    # Параметры симуляции
+    current_mood_score = Column(Float, default=0.8) # 0.0 - 1.0 (для генерации текста)
+    stress = Column(Integer, default=0)             # 0 - 100 (игровая механика)
+    
+    # Координаты (0-100)
+    coord_x = Column(Integer, default=50)
+    coord_y = Column(Integer, default=50)
 
 class Task(Base):
     __tablename__ = "tasks"
 
     id = Column(Integer, primary_key=True, index=True)
-    description = Column(String, nullable=False)
-    status = Column(String, default="todo")
-    assignee_id = Column(Integer, ForeignKey("agents.id"))
-
-    assignee = relationship("Agent", back_populates="tasks")
-
-class Relationship(Base):
-    __tablename__ = "relationships"
-    
-    __table_args__ = (
-        UniqueConstraint("agent_1_id", "agent_2_id", name="unique_agent_pair"),
-    )
-
-    id = Column(Integer, primary_key=True, index=True)
-    agent_1_id = Column(Integer, ForeignKey("agents.id"), nullable=False)
-    agent_2_id = Column(Integer, ForeignKey("agents.id"), nullable=False)
-    affinity_score = Column(Integer, default=0)
-
-    agent1 = relationship("Agent", foreign_keys=[agent_1_id], back_populates="relationships_as_agent1")
-    agent2 = relationship("Agent", foreign_keys=[agent_2_id], back_populates="relationships_as_agent2")
-
-class Message(Base):
-    __tablename__ = "messages"
-
-    id = Column(Integer, primary_key=True, index=True)
-    content = Column(String, nullable=False)
-    sender_type = Column(String, nullable=False)          # "user" или "agent"
-    sender_id = Column(Integer, ForeignKey("agents.id"), nullable=True)  # null для user
-    recipient_id = Column(Integer, ForeignKey("agents.id"), nullable=True) # null = всем
-    timestamp = Column(DateTime, default=datetime.utcnow)
-
-    sender = relationship("Agent", foreign_keys=[sender_id], back_populates="sent_messages")
+    title = Column(String)
+    description = Column(String, default="")
+    assignee_id = Column(Integer, nullable=True)
+    is_completed = Column(Boolean, default=False)

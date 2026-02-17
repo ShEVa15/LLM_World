@@ -10,7 +10,6 @@ INITIAL_AGENTS = [
 ]
 
 async def init_db():
-    # Удаляем старые таблицы и создаем новые
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
         await conn.run_sync(Base.metadata.create_all)
@@ -23,12 +22,12 @@ async def init_db():
                 skills=data["skills"],
                 coord_x=data["coord_x"],
                 coord_y=data["coord_y"],
-                stress=0,             # Начальный стресс
+                stress=0,
                 current_activity="Готов к работе"
             )
             db.add(agent)
         await db.commit()
-        print("✅ Мир инициализирован! Агенты созданы.")
+        print("✅ Мир инициализирован!")
 
 if __name__ == "__main__":
     asyncio.run(init_db())
