@@ -6,3 +6,4 @@ pydantic
 chromadb
 sentence-transformers
 requests
+plotly.express

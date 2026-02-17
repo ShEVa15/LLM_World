@@ -4,3 +4,4 @@ __pycache__
 venv
 .venv
 agents.db
+chroma_data
