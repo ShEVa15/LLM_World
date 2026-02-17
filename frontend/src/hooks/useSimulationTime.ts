@@ -2,16 +2,25 @@ import { useEffect } from "react";
 import { useSimulationStore } from "../store/useSimulationStore";
 
 export const useSimulationTime = () => {
-  const tick = useSimulationStore((state) => state.tick);
-  const isPaused = useSimulationStore((state) => state.isPaused);
+  const { fetchState, tick } = useSimulationStore();
 
   useEffect(() => {
-    if (isPaused) return;
-
-    const interval = setInterval(() => {
+    // 1. Часики на фронте (тикают каждую секунду виртуального времени)
+    const timeInterval = setInterval(() => {
       tick();
-    }, 1000); // 1 реальная секунда = 1 игровая минута
+    }, 1000); // 1 секунда реального времени = 1 минута симуляции
 
-    return () => clearInterval(interval);
-  }, [isPaused, tick]);
+    // 2. Синхронизация с бэкендом (каждые 2 секунды)
+    const syncInterval = setInterval(() => {
+      fetchState();
+    }, 2000);
+
+    // Первичная загрузка
+    fetchState();
+
+    return () => {
+      clearInterval(timeInterval);
+      clearInterval(syncInterval);
+    };
+  }, [fetchState, tick]);
 };
