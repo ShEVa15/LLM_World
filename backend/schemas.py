@@ -1,6 +1,6 @@
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from typing import Optional
-
+from datetime import datetime
 
 class AgentBase(BaseModel):
     name: str
@@ -53,3 +53,4 @@ class RelationshipResponse(RelationshipBase):
     id: int
 
     model_config = ConfigDict(from_attributes=True)
+

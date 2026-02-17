@@ -1,14 +1,15 @@
 from contextlib import asynccontextmanager
-from typing import List
-import asyncio  
+from typing import List, Optional
+import asyncio
+from datetime import datetime
 
-
-from fastapi import FastAPI, Depends, HTTPException, status, BackgroundTasks 
+from fastapi import FastAPI, Depends, HTTPException, status, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi import WebSocket, WebSocketDisconnect
+from fastapi.staticfiles import StaticFiles
+from pathlib import Path
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-
 
 from database import AsyncSessionLocal, engine, Base
 import models
@@ -26,18 +27,21 @@ class ConnectionManager:
     def disconnect(self, websocket: WebSocket):
         self.active_connections.remove(websocket)
 
-    async def broadcast(self, message: dict): #отправка json
+    async def broadcast(self, message: dict):
         for connection in self.active_connections:
             try:
                 await connection.send_json(message)
             except Exception:
                 await self.disconnect(connection)
 
+
 manager = ConnectionManager()
 
+
 async def mock_agent_brain(task_description: str):
-    await asyncio.sleep(3)  # типо думает
-    return {"reply": "Понял, делаю!", "mood_change": -2}  # всегда отвечает так
+    await asyncio.sleep(3)
+    return {"reply": "Понял, делаю!", "mood_change": -2}
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -46,9 +50,10 @@ async def lifespan(app: FastAPI):
     yield
     await engine.dispose()
 
+
 app = FastAPI(lifespan=lifespan)
 
-
+# Подключаем CORS
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -57,11 +62,15 @@ app.add_middleware(
     allow_credentials=True,
 )
 
+# Монтируем статические файлы фронтенда (если папка dist существует)
+frontend_dist = Path(__file__).parent.parent / "frontend" / "dist"
+if frontend_dist.exists():
+    app.mount("/", StaticFiles(directory=str(frontend_dist), html=True), name="static")
+
 
 async def get_db() -> AsyncSession:
     async with AsyncSessionLocal() as session:
         yield session
-
 
 
 @app.post("/agents/", response_model=schemas.AgentResponse, status_code=201)
@@ -71,6 +80,7 @@ async def create_agent(agent: schemas.AgentCreate, db: AsyncSession = Depends(ge
     await db.commit()
     await db.refresh(db_agent)
     return db_agent
+
 
 @app.post("/tasks/", response_model=schemas.TaskResponse, status_code=201)
 async def create_task(task: schemas.TaskCreate, db: AsyncSession = Depends(get_db)):
@@ -84,6 +94,7 @@ async def create_task(task: schemas.TaskCreate, db: AsyncSession = Depends(get_d
     await db.refresh(db_task)
     return db_task
 
+
 @app.get("/agents/", response_model=List[schemas.AgentResponse])
 async def list_agents(db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(models.Agent))
@@ -95,7 +106,7 @@ async def websocket_endpoint(websocket: WebSocket):
     await manager.connect(websocket)
     try:
         while True:
-            await websocket.receive_text()  # ждём пока клиент не отключится
+            await websocket.receive_text()
     except WebSocketDisconnect:
         manager.disconnect(websocket)
 
@@ -111,7 +122,6 @@ async def assign_task(task_id: int, agent_id: int,
     if not agent:
         raise HTTPException(404, "Agent not found")
 
-
     background_tasks.add_task(
         process_agent_assignment,
         task_id, agent_id, task.description
@@ -120,16 +130,13 @@ async def assign_task(task_id: int, agent_id: int,
 
 
 async def process_agent_assignment(task_id: int, agent_id: int, task_description: str):
-
-    result = await mock_agent_brain(task_description) 
-
+    result = await mock_agent_brain(task_description)
 
     async with AsyncSessionLocal() as db:
         agent = await db.get(models.Agent, agent_id)
-        if agent:  # если агент все ещё есть
+        if agent:
             agent.current_mood_score += result["mood_change"]
             await db.commit()
-
 
             await manager.broadcast({
                 "event": "agent_action",
@@ -137,3 +144,5 @@ async def process_agent_assignment(task_id: int, agent_id: int, task_description
                 "message": result["reply"],
                 "new_mood": agent.current_mood_score
             })
+
+

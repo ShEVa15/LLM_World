@@ -1,7 +1,7 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, UniqueConstraint
+from sqlalchemy import Column, Integer, String, ForeignKey, UniqueConstraint, DateTime
 from sqlalchemy.orm import relationship
 from database import Base
-
+from datetime import datetime
 
 class Agent(Base):
     __tablename__ = "agents"
@@ -10,7 +10,6 @@ class Agent(Base):
     name = Column(String, nullable=False)
     role = Column(String, nullable=False)
     current_mood_score = Column(Integer, default=0)
-
 
     tasks = relationship("Task", back_populates="assignee", cascade="all, delete-orphan")
     relationships_as_agent1 = relationship(
@@ -50,6 +49,6 @@ class Relationship(Base):
     agent_2_id = Column(Integer, ForeignKey("agents.id"), nullable=False)
     affinity_score = Column(Integer, default=0)
 
-
     agent1 = relationship("Agent", foreign_keys=[agent_1_id], back_populates="relationships_as_agent1")
     agent2 = relationship("Agent", foreign_keys=[agent_2_id], back_populates="relationships_as_agent2")
+
