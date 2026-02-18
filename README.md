@@ -18,7 +18,7 @@
 ### Backend (Python/FastAPI)
 - **FastAPI:** Обработка REST API и WebSocket соединений.
 - **SQLAlchemy + SQLite:** Персистентное хранение логов, состояний агентов и задач.
-- **Google Gemini 2.0 Flash:** Ядро интеллекта агентов.
+- **Google Gemini 2.5 Flash:** Ядро интеллекта агентов.
 - **ChromaDB:** Векторная база данных для реализации RAG (памяти).
 
 ### Frontend (React/TypeScript)
