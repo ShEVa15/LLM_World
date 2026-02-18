@@ -6,7 +6,7 @@ import google.generativeai as genai
 from chromadb.utils import embedding_functions
 
 # === 1. НАСТРОЙКИ GEMINI (Вставь ключ) ===
-GEMINI_API_KEY = "AIzaSyC1wwfeii1URIaUhO3gJu5aUG-dxjPZlX0"
+GEMINI_API_KEY = "АПИ_КЛЮЧ_ГЕМИНИ"
 genai.configure(api_key=GEMINI_API_KEY)
 
 # --- СЛОЙ 1: СИСТЕМНЫЙ ПРОМПТ (ФУНДАМЕНТ) ---
