@@ -1,65 +1,20 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, UniqueConstraint, DateTime
-from sqlalchemy.orm import relationship
+from sqlalchemy import Column, String, Integer, DateTime
+from sqlalchemy.sql import func
 from database import Base
-from datetime import datetime
 
 class Agent(Base):
     __tablename__ = "agents"
 
-    id = Column(Integer, primary_key=True, index=True)
+    # Строковый ID (ockham, christina, darius)
+    id = Column(String, primary_key=True, index=True)
     name = Column(String, nullable=False)
     role = Column(String, nullable=False)
-    current_mood_score = Column(Integer, default=0)
+    skills = Column(String, default="")
 
-    tasks = relationship("Task", back_populates="assignee", cascade="all, delete-orphan")
-    relationships_as_agent1 = relationship(
-        "Relationship",
-        foreign_keys="Relationship.agent_1_id",
-        back_populates="agent1",
-        cascade="all, delete-orphan"
-    )
-    relationships_as_agent2 = relationship(
-        "Relationship",
-        foreign_keys="Relationship.agent_2_id",
-        back_populates="agent2",
-        cascade="all, delete-orphan"
-    )
-    # Связь с сообщениями, где агент является отправителем
-    sent_messages = relationship("Message", foreign_keys="Message.sender_id", back_populates="sender")
-
-class Task(Base):
-    __tablename__ = "tasks"
-
+class ChatLog(Base):
+    __tablename__ = "chat_logs"
     id = Column(Integer, primary_key=True, index=True)
-    description = Column(String, nullable=False)
-    status = Column(String, default="todo")
-    assignee_id = Column(Integer, ForeignKey("agents.id"))
-
-    assignee = relationship("Agent", back_populates="tasks")
-
-class Relationship(Base):
-    __tablename__ = "relationships"
-    
-    __table_args__ = (
-        UniqueConstraint("agent_1_id", "agent_2_id", name="unique_agent_pair"),
-    )
-
-    id = Column(Integer, primary_key=True, index=True)
-    agent_1_id = Column(Integer, ForeignKey("agents.id"), nullable=False)
-    agent_2_id = Column(Integer, ForeignKey("agents.id"), nullable=False)
-    affinity_score = Column(Integer, default=0)
-
-    agent1 = relationship("Agent", foreign_keys=[agent_1_id], back_populates="relationships_as_agent1")
-    agent2 = relationship("Agent", foreign_keys=[agent_2_id], back_populates="relationships_as_agent2")
-
-class Message(Base):
-    __tablename__ = "messages"
-
-    id = Column(Integer, primary_key=True, index=True)
-    content = Column(String, nullable=False)
-    sender_type = Column(String, nullable=False)          # "user" или "agent"
-    sender_id = Column(Integer, ForeignKey("agents.id"), nullable=True)  # null для user
-    recipient_id = Column(Integer, ForeignKey("agents.id"), nullable=True) # null = всем
-    timestamp = Column(DateTime, default=datetime.utcnow)
-
-    sender = relationship("Agent", foreign_keys=[sender_id], back_populates="sent_messages")
+    agent_id = Column(String)
+    prompt = Column(String)
+    reply = Column(String)
+    timestamp = Column(DateTime(timezone=True), server_default=func.now())
