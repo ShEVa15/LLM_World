@@ -1,225 +1,180 @@
-from contextlib import asynccontextmanager
-from typing import List
+import json
 import asyncio
-import os
-from pathlib import Path
-
-from fastapi import FastAPI, Depends, HTTPException, status, BackgroundTasks
-from fastapi.middleware.cors import CORSMiddleware
-from fastapi import WebSocket, WebSocketDisconnect
-from fastapi.staticfiles import StaticFiles
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, desc
+import random # <--- НУЖЕН ДЛЯ ВЕРОЯТНОСТИ СПЛЕТЕН
 from datetime import datetime
+from typing import List
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+from pydantic import BaseModel
 
 from database import AsyncSessionLocal, engine, Base
-import models
-import schemas
+import models, schemas, memory
 
-# --- WebSocket менеджер ---
-class ConnectionManager:
-    def __init__(self):
-        self.active_connections: List[WebSocket] = []
+app = FastAPI()
 
-    async def connect(self, websocket: WebSocket):
-        await websocket.accept()
-        self.active_connections.append(websocket)
-
-    def disconnect(self, websocket: WebSocket):
-        self.active_connections.remove(websocket)
-
-    async def broadcast(self, message: dict):
-        for connection in self.active_connections:
-            try:
-                await connection.send_json(message)
-            except Exception:
-                await self.disconnect(connection)
-
-manager = ConnectionManager()
-
-# --- Мок агента ---
-async def mock_agent_brain(task_description: str):
-    await asyncio.sleep(3)
-    return {"reply": "Понял, делаю!", "mood_change": -2}
-
-# --- Lifespan ---
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    yield
-    await engine.dispose()
-
-# --- Создание приложения ---
-app = FastAPI(lifespan=lifespan)
-
-# --- Монтирование статики фронтенда (если папка dist существует) ---
-frontend_dist = Path(__file__).parent.parent / "frontend" / "dist"
-if frontend_dist.exists():
-    app.mount("/", StaticFiles(directory=str(frontend_dist), html=True), name="static")
-
-# --- CORS ---
 app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-    allow_credentials=True,
+    CORSMiddleware, 
+    allow_origins=["*"], 
+    allow_methods=["*"], 
+    allow_headers=["*"]
 )
 
-# --- Зависимость для получения сессии БД ---
-async def get_db() -> AsyncSession:
-    async with AsyncSessionLocal() as session:
-        yield session
+RECENT_CHATS = []
 
-# --- Эндпоинты для агентов ---
-@app.post("/agents/", response_model=schemas.AgentResponse, status_code=201)
-async def create_agent(agent: schemas.AgentCreate, db: AsyncSession = Depends(get_db)):
-    db_agent = models.Agent(**agent.model_dump())
-    db.add(db_agent)
-    await db.commit()
-    await db.refresh(db_agent)
-    return db_agent
+class WorldState(BaseModel):
+    state_json: str
+
+# --- API ENDPOINTS (Оставляем как было) ---
 
 @app.get("/agents/", response_model=List[schemas.AgentResponse])
-async def list_agents(db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(models.Agent))
-    return result.scalars().all()
-
-# --- Эндпоинты для задач ---
-@app.post("/tasks/", response_model=schemas.TaskResponse, status_code=201)
-async def create_task(task: schemas.TaskCreate, db: AsyncSession = Depends(get_db)):
-    if task.assignee_id:
-        agent = await db.get(models.Agent, task.assignee_id)
-        if not agent:
-            raise HTTPException(404, "Agent not found")
-    db_task = models.Task(**task.model_dump())
-    db.add(db_task)
-    await db.commit()
-    await db.refresh(db_task)
-    return db_task
-
-@app.post("/tasks/{task_id}/assign/{agent_id}")
-async def assign_task(task_id: int, agent_id: int,
-                      background_tasks: BackgroundTasks,
-                      db: AsyncSession = Depends(get_db)):
-    task = await db.get(models.Task, task_id)
-    if not task:
-        raise HTTPException(404, "Task not found")
-    agent = await db.get(models.Agent, agent_id)
-    if not agent:
-        raise HTTPException(404, "Agent not found")
-
-    background_tasks.add_task(
-        process_agent_assignment,
-        task_id, agent_id, task.description
-    )
-    return {"status": "processing"}
-
-async def process_agent_assignment(task_id: int, agent_id: int, task_description: str):
-    result = await mock_agent_brain(task_description)
+async def list_agents():
     async with AsyncSessionLocal() as db:
-        agent = await db.get(models.Agent, agent_id)
-        if agent:
-            agent.current_mood_score += result["mood_change"]
-            await db.commit()
-            await manager.broadcast({
-                "event": "agent_action",
-                "agent_id": agent_id,
-                "message": result["reply"],
-                "new_mood": agent.current_mood_score
-            })
+        result = await db.execute(select(models.Agent))
+        return result.scalars().all()
 
-# --- Эндпоинты для сообщений ---
-@app.post("/messages/", status_code=202)
-async def send_message(
-    message: schemas.MessageCreate,
-    background_tasks: BackgroundTasks,
-    db: AsyncSession = Depends(get_db)
-):
-    # Сохраняем сообщение пользователя
-    db_message = models.Message(
-        content=message.content,
-        sender_type="user",
-        recipient_id=message.recipient_id,
-        timestamp=datetime.utcnow()
-    )
-    db.add(db_message)
-    await db.commit()
-    await db.refresh(db_message)
+@app.get("/chats/")
+async def get_chats():
+    return RECENT_CHATS
 
-    # Рассылаем через WebSocket
-    await manager.broadcast({
-        "event": "new_message",
-        "id": db_message.id,
-        "content": db_message.content,
-        "sender_type": "user",
-        "sender_id": None,
-        "recipient_id": db_message.recipient_id,
-        "timestamp": db_message.timestamp.isoformat()
-    })
+@app.post("/save_world")
+async def save_world(state: WorldState):
+    with open("world_state.json", "w") as f:
+        f.write(state.state_json)
+    return {"status": "saved"}
 
-    # Если указан получатель-агент – запускаем ответ
-    if message.recipient_id:
-        background_tasks.add_task(
-            process_user_message,
-            message.content,
-            message.recipient_id,
-            db_message.id
-        )
+@app.get("/load_world")
+async def load_world():
+    try:
+        with open("world_state.json", "r") as f:
+            return json.loads(f.read())
+    except FileNotFoundError:
+        return None
 
-    return {"status": "accepted"}
-
-async def process_user_message(user_content: str, agent_id: int, original_message_id: int):
-    result = await mock_agent_brain(user_content)
-    async with AsyncSessionLocal() as db:
-        agent = await db.get(models.Agent, agent_id)
-        if not agent:
-            return
-
-        # Обновляем настроение
-        agent.current_mood_score += result["mood_change"]
-        await db.commit()
-
-        # Сохраняем ответ агента
-        reply = models.Message(
-            content=result["reply"],
-            sender_type="agent",
-            sender_id=agent_id,
-            recipient_id=None,
-            timestamp=datetime.utcnow()
-        )
-        db.add(reply)
-        await db.commit()
-        await db.refresh(reply)
-
-        # Рассылаем ответ через WebSocket
-        await manager.broadcast({
-            "event": "new_message",
-            "id": reply.id,
-            "content": reply.content,
-            "sender_type": "agent",
-            "sender_id": agent_id,
-            "recipient_id": None,
-            "timestamp": reply.timestamp.isoformat()
-        })
-
-@app.get("/messages/", response_model=List[schemas.MessageResponse])
-async def get_messages(limit: int = 50, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(
-        select(models.Message)
-        .order_by(models.Message.timestamp.desc())
-        .limit(limit)
-    )
-    messages = result.scalars().all()
-    return messages[::-1]  # возвращаем в хронологическом порядке
-
-# --- WebSocket ---
+# --- ГЛАВНЫЙ ЦИКЛ WEBSOCKET ---
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
-    await manager.connect(websocket)
+    await websocket.accept()
+    print("[Socket] Подключено!")
     try:
         while True:
-            await websocket.receive_text()  # просто держим соединение открытым
+            data = await websocket.receive_text()
+            event = json.loads(data)
+            
+            # ==========================================
+            # ВАРИАНТ 1: СИСТЕМНОЕ СОБЫТИЕ (Кнопки)
+            # ==========================================
+            if event.get("type") == "ASK_LLM":
+                p = event["payload"]
+                agent_id, text = p["agentId"], p["promptText"]
+                print(f"[{agent_id}] Обработка события: {text[:30]}...")
+                
+                # 1. RAG + LLM
+                context = memory.get_relevant_context(agent_id, text)
+                reply_text = await memory.generate_chat(agent_id, text, context)
+                
+                # 2. Сохраняем
+                async with AsyncSessionLocal() as db:
+                    db.add(models.ChatLog(agent_id=agent_id, prompt=text, reply=reply_text))
+                    await db.commit()
+                memory.save_memory(agent_id, text, reply_text)
+                
+                # 3. Обновляем историю и шлем ответ
+                chat_entry = {"agents": [agent_id], "text": reply_text, "time": datetime.now().strftime("%H:%M")}
+                RECENT_CHATS.insert(0, chat_entry)
+                if len(RECENT_CHATS) > 50: RECENT_CHATS.pop()
+                
+                await websocket.send_text(json.dumps({
+                    "type": "CHAT_MESSAGE",
+                    "payload": {"senderId": agent_id, "text": reply_text}
+                }))
+
+            # ==========================================
+            # ВАРИАНТ 2: ИГРОК ПИШЕТ В ЧАТ (Цепная реакция)
+            # ==========================================
+            elif event.get("type") == "USER_MESSAGE":
+                p = event["payload"]
+                user_text = p.get("text") or p.get("promptText") or ""
+                print(f"[Player] Пишет: {user_text}")
+
+                # 1. Эхо сообщения игрока
+                await websocket.send_text(json.dumps({
+                    "type": "CHAT_MESSAGE",
+                    "payload": {"senderId": "User", "text": user_text}
+                }))
+
+                # --- ИНИЦИАЛИЗАЦИЯ ЦЕПОЧКИ ---
+                turn_count = 0
+                continue_chance = 1.0  
+                conversation_history = f"Тимлид: {user_text}"
+                
+                # Кто начнет? (Эвристика)
+                txt_low = user_text.lower()
+                if any(x in txt_low for x in ["кристин", "фронт", "дизайн"]): current_speaker = "christina"
+                elif any(x in txt_low for x in ["дариус", "безопасн", "докер"]): current_speaker = "darius"
+                else: current_speaker = "ockham"
+
+                # Цикл "Цепная реакция" (Максимум 4 сообщения для экономии токенов и динамики)
+                while turn_count < 4 and random.random() < continue_chance:
+                    # Уникальные промпты для живости
+                    if turn_count == 0:
+                        prompt = f"Тимлид обратился к нам: '{user_text}'. Ответь ему в своей манере."
+                    else:
+                        prompt = f"В чате обсуждают: '{conversation_history}'. Твое мнение?"
+
+                    context = memory.get_relevant_context(current_speaker, user_text)
+                    reply = await memory.generate_chat(current_speaker, prompt, context)
+
+                    # Сохраняем в БД и память
+                    async with AsyncSessionLocal() as db:
+                        db.add(models.ChatLog(agent_id=current_speaker, prompt=prompt[:100], reply=reply))
+                        await db.commit()
+                    memory.save_memory(current_speaker, user_text, reply)
+
+                    # Отправляем на фронт
+                    await websocket.send_text(json.dumps({
+                        "type": "CHAT_MESSAGE",
+                        "payload": {"senderId": current_speaker, "text": reply}
+                    }))
+
+                    conversation_history += f"\n{current_speaker}: {reply}"
+
+                    # Снижаем вероятность затягивания
+                    continue_chance = 0.8 if turn_count == 0 else continue_chance - 0.25
+                    if continue_chance <= 0: break
+
+                    await asyncio.sleep(random.uniform(1.5, 3.0))
+                    
+                    # Выбираем следующего, кто НЕ говорил только что
+                    others = ["ockham", "christina", "darius"]
+                    if current_speaker in others: others.remove(current_speaker)
+                    current_speaker = random.choice(others)
+                    turn_count += 1
+
+                # ==========================================
+                # ВАРИАНТ 3: БОЛТОВНЯ (Banter)
+                # ==========================================
+                # Если ответил агент, другой может вмешаться с шансом 70%
+                if random.random() < 0.7:
+                    await asyncio.sleep(2) # Пауза
+                    
+                    # Выбираем второго (кто НЕ отвечал)
+                    others = ["ockham", "christina", "darius"]
+                    if responder_id in others: others.remove(responder_id)
+                    interrupter_id = random.choice(others)
+
+                    # Промпт для вмешательства
+                    banter_prompt = f"Коллега {responder_id} ответил Тимлиду: '{reply_1}'. Прокомментируй это (пошути или поспорь)."
+                    reply_2 = await memory.generate_chat(interrupter_id, banter_prompt, "")
+
+                    # Отправляем комментарий второго
+                    await websocket.send_text(json.dumps({
+                        "type": "CHAT_MESSAGE",
+                        "payload": {"senderId": interrupter_id, "text": reply_2}
+                    }))
+
     except WebSocketDisconnect:
-        manager.disconnect(websocket)
+        print("[Socket] Отключено.")
+    except Exception as e:
+        print(f"[ERROR] {e}")
