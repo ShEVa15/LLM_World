@@ -5,7 +5,7 @@ DATABASE_URL = "sqlite+aiosqlite:///./agents.db?foreign_keys=on"
 
 engine = create_async_engine(
     DATABASE_URL,
-    echo=True,  # TODO откладка, после MVP лучше офнуть
+    echo=True, 
 )
 
 AsyncSessionLocal = async_sessionmaker(
