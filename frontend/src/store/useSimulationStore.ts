@@ -83,7 +83,7 @@ interface SimulationState {
   isInspectorOpen: boolean;
   selectedAgentId: string | null;
   activeEvent: GameEvent | null;
-
+  activeIncidents: string[];
   tick: () => void;
   setActiveTab: (tab: "chat" | "tasks" | "map") => void;
   toggleInspector: () => void;
@@ -106,6 +106,7 @@ export const useSimulationStore = create<SimulationState>((set, get) => ({
   isPaused: false,
   agents: INITIAL_AGENTS,
   tasks: INITIAL_TASKS,
+  activeIncidents: [],
   messages: [
     {
       id: "sys-start",

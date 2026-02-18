@@ -7,11 +7,12 @@ import InspectorPanel from "./components/InspectorPanel";
 import TasksView from "./components/TasksView";
 import EventModal from "./components/EventModal";
 import ChatView from "./components/ChatView";
+import { useAutoSave } from "./hooks/useAutoSave";
 
 export default function App() {
   // Запускаем время
   useSimulationTime();
-
+  useAutoSave();
   // === НОВЫЙ БЛОК: Подключение к WebSocket при старте ===
   useEffect(() => {
     // Стучимся к бэкендерам по дефолтному порту 8000
