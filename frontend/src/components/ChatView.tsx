@@ -1,18 +1,20 @@
 import { useState, useRef, useEffect } from "react";
 import { useSimulationStore } from "../store/useSimulationStore";
+import { useSocket } from "../hooks/useSocket"; // <--- 1. ИМПОРТИРУЕМ ХУК
 
 export default function ChatView() {
-  const { messages, addMessage, agents } = useSimulationStore();
+  const { messages, agents } = useSimulationStore(); // addMessage больше не нужен здесь
   const [inputText, setInputText] = useState("");
 
-  // Реф для автоскролла вниз
+  // <--- 2. ДОСТАЕМ ФУНКЦИЮ ОТПРАВКИ
+  const { send } = useSocket();
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
-  // Скроллим вниз при каждом новом сообщении
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
@@ -21,12 +23,16 @@ export default function ChatView() {
     e.preventDefault();
     if (!inputText.trim()) return;
 
-    // Отправляем сообщение от имени 'user'
-    addMessage(inputText.trim(), "user");
-    setInputText("");
+    // <--- 3. ЛОГИКА ОТПРАВКИ НА БЭКЕНД
+    send({
+      type: "USER_MESSAGE",
+      payload: {
+        agentId: "User",
+        promptText: inputText.trim(),
+      },
+    });
 
-    // ТУТ БУДЕТ ВЫЗОВ API К БЭКЕНДУ В БУДУЩЕМ
-    // Например: sendToLLM(inputText.trim());
+    setInputText("");
   };
 
   const formatTime = (mins: number) => {
@@ -48,9 +54,9 @@ export default function ChatView() {
       {/* Окно сообщений */}
       <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar scroll-smooth">
         {messages.map((msg) => {
-          const isUser = msg.senderId === "user";
+          const isUser = msg.senderId === "user" || msg.senderId === "User"; // Учитываем оба варианта написания ID
           const isSystem = msg.senderId === "system";
-          const agent = agents[msg.senderId]; // Если это агент, найдем его в сторе
+          const agent = agents[msg.senderId];
 
           if (isSystem) {
             return (
@@ -70,7 +76,7 @@ export default function ChatView() {
               <div
                 className={`flex gap-3 max-w-[80%] ${isUser ? "flex-row-reverse" : "flex-row"}`}
               >
-                {/* Аватар (для юзера - иконка, для агента - его аватар) */}
+                {/* Аватар */}
                 <div className="flex-shrink-0 mt-1">
                   {isUser ? (
                     <div className="w-8 h-8 rounded-full bg-slate-700 border border-slate-600 flex items-center justify-center text-xs">
@@ -129,7 +135,6 @@ export default function ChatView() {
             </div>
           );
         })}
-        {/* Пустой div для якоря автоскролла */}
         <div ref={messagesEndRef} />
       </div>
 
@@ -146,7 +151,7 @@ export default function ChatView() {
             type="text"
             value={inputText}
             onChange={(e) => setInputText(e.target.value)}
-            placeholder="Напишите команду агентам (например: @Max оцени время на базу данных)..."
+            placeholder="Напишите команду агентам (например: Почему упал прод?)..."
             className="w-full bg-slate-950 border border-slate-700 rounded-xl py-3 pl-8 pr-16 text-sm text-white placeholder-slate-500 outline-none focus:border-brand-500 focus:ring-1 focus:ring-brand-500 transition-all font-mono"
           />
           <button
