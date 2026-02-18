@@ -1,12 +1,16 @@
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
 import { useSimulationStore } from "../store/useSimulationStore";
 import ForceGraph2D from "react-force-graph-2d";
 
+// Обновленные интерфейсы с фиксированными координатами
 interface GraphNode {
   id: string;
   name: string;
   color: string;
   val: number;
+  group: "agent" | "task"; // Чтобы различать стили
+  fx?: number; // Фиксированная позиция X
+  fy?: number; // Фиксированная позиция Y
 }
 
 interface GraphLink {
@@ -19,10 +23,15 @@ export default function InspectorPanel() {
   const { isInspectorOpen, selectedAgentId, agents, tasks } =
     useSimulationStore();
 
+  // ИСПРАВЛЕНИЕ 1: Инициализация null и подавление any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const fgRef = useRef<any>(null);
+
   const agent = selectedAgentId
     ? Object.values(agents).find((a) => a.id === selectedAgentId) || null
     : null;
 
+  // --- ЛОГИКА СТРЕССА ---
   const getStressState = (stress: number) => {
     if (stress < 50)
       return {
@@ -41,6 +50,7 @@ export default function InspectorPanel() {
 
   const stressState = agent ? getStressState(agent.stress) : null;
 
+  // --- ЛОГИКА ПРОЦЕССА ---
   let currentProcess = "Свободен_";
   if (agent) {
     if (agent.status === "WORKING") {
@@ -57,30 +67,86 @@ export default function InspectorPanel() {
     }
   }
 
+  // --- НОВАЯ СТАТИЧНАЯ ЛОГИКА ГРАФА ---
   const graphData = useMemo(() => {
     const nodes: GraphNode[] = [];
     const links: GraphLink[] = [];
 
-    Object.values(agents).forEach((a) => {
-      nodes.push({ id: a.id, name: a.name, color: a.color, val: 20 });
+    const agentIds = Object.keys(agents);
+    const agentCount = agentIds.length;
+
+    const INNER_RADIUS = 25; // Агенты
+    const OUTER_RADIUS = 55; // Задачи
+
+    // 1. Расставляем АГЕНТОВ (Внутренний круг)
+    agentIds.forEach((agentId, i) => {
+      const a = agents[agentId];
+      const angle = (i / agentCount) * 2 * Math.PI;
+
+      nodes.push({
+        id: a.id,
+        name: a.name,
+        color: a.color,
+        val: 15,
+        group: "agent",
+        fx: Math.cos(angle) * INNER_RADIUS,
+        fy: Math.sin(angle) * INNER_RADIUS,
+      });
     });
 
-    Object.values(tasks).forEach((t) => {
-      if (t.status === "IN_PROGRESS" || t.status === "PAUSED") {
+    // 2. Расставляем ЗАДАЧИ (Внешний круг)
+    const activeTasks = Object.values(tasks).filter(
+      (t) => t.status === "IN_PROGRESS" || t.status === "PAUSED",
+    );
+
+    agentIds.forEach((agentId, i) => {
+      const agentTasks = activeTasks.filter(
+        (t) => t.assignedAgentId === agentId,
+      );
+      const agentAngle = (i / agentCount) * 2 * Math.PI;
+
+      agentTasks.forEach((t, j) => {
+        const offset = (j - (agentTasks.length - 1) / 2) * 0.3;
+        const taskAngle = agentAngle + offset;
+
         nodes.push({
           id: t.id,
-          name: t.title,
+          name: t.title.slice(0, 8) + "..",
           color: t.isIncident ? "#f43f5e" : "#64748b",
-          val: 10,
+          val: 8,
+          group: "task",
+          fx: Math.cos(taskAngle) * OUTER_RADIUS,
+          fy: Math.sin(taskAngle) * OUTER_RADIUS,
         });
-        if (t.assignedAgentId) {
-          const a = agents[t.assignedAgentId];
-          if (a) {
-            links.push({ source: a.id, target: t.id, color: a.color });
-          }
-        }
-      }
+
+        links.push({
+          source: agentId,
+          target: t.id,
+          color: agents[agentId].color,
+        });
+      });
     });
+
+    const unassigned = activeTasks.filter((t) => !t.assignedAgentId);
+    unassigned.forEach((t, i) => {
+      nodes.push({
+        id: t.id,
+        name: "Wait...",
+        color: "#64748b",
+        val: 5,
+        group: "task",
+        fx: (i - unassigned.length / 2) * 10,
+        fy: OUTER_RADIUS + 10,
+      });
+    });
+
+    for (let i = 0; i < agentCount; i++) {
+      links.push({
+        source: agentIds[i],
+        target: agentIds[(i + 1) % agentCount],
+        color: "rgba(255, 255, 255, 0.1)",
+      });
+    }
 
     return { nodes, links };
   }, [agents, tasks]);
@@ -94,21 +160,47 @@ export default function InspectorPanel() {
       {/* === БЛОК ГРАФА === */}
       <div className="p-6 border-b border-slate-700/50 bg-slate-900/40">
         <h2 className="text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-3 font-mono">
-          Сетевой граф
+          Topology Radar (Live)
         </h2>
         <div className="h-36 rounded-xl bg-[#0f172a] border border-slate-700 overflow-hidden flex items-center justify-center relative cursor-crosshair">
           <ForceGraph2D
+            ref={fgRef}
             width={310}
             height={144}
             graphData={graphData}
-            nodeLabel="name"
-            nodeColor="color"
-            nodeRelSize={6}
-            linkColor="color"
-            linkWidth={2}
-            linkDirectionalParticles={2}
-            linkDirectionalParticleSpeed={0.01}
+            cooldownTicks={0}
             backgroundColor="#0f172a"
+            // ИСПРАВЛЕНИЕ 2: Подавление any для линков
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            linkColor={(link: any) => link.color}
+            linkWidth={1.5}
+            // ИСПРАВЛЕНИЕ 3: Подавление any для узлов и кастомная отрисовка
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            nodeCanvasObject={(node: any, ctx, globalScale) => {
+              const label = node.name;
+              const group = node.group;
+              const fontSize = (group === "agent" ? 10 : 8) / globalScale;
+
+              ctx.beginPath();
+              ctx.arc(node.x, node.y, node.val / 3, 0, 2 * Math.PI, false);
+              ctx.fillStyle = node.color;
+              ctx.fill();
+
+              if (group === "agent") {
+                ctx.lineWidth = 1.5 / globalScale;
+                ctx.strokeStyle = "#fff";
+                ctx.stroke();
+              }
+
+              ctx.font = `${fontSize}px monospace`;
+              ctx.textAlign = "center";
+              ctx.textBaseline = "top";
+              ctx.fillStyle =
+                group === "agent"
+                  ? "rgba(255,255,255,0.9)"
+                  : "rgba(255,255,255,0.5)";
+              ctx.fillText(label, node.x, node.y + node.val / 3 + 2);
+            }}
           />
         </div>
       </div>
@@ -139,7 +231,6 @@ export default function InspectorPanel() {
             </span>
           ) : (
             <div className="w-full text-left space-y-5 fade-in pb-8">
-              {/* Шапка профиля */}
               <div className="flex items-center gap-4">
                 <div
                   className="w-16 h-16 rounded-2xl border-2 p-1 bg-slate-800 shadow-lg relative flex-shrink-0"
@@ -166,7 +257,6 @@ export default function InspectorPanel() {
                 </div>
               </div>
 
-              {/* Стресс */}
               <div className="bg-slate-900/80 border border-slate-700/50 rounded-xl p-4 shadow-inner">
                 <div className="flex justify-between items-center mb-2">
                   <p className="text-[10px] uppercase text-slate-500 font-bold tracking-wider">
@@ -186,7 +276,6 @@ export default function InspectorPanel() {
                 </div>
               </div>
 
-              {/* Текущий процесс */}
               <div className="bg-slate-900/80 border border-slate-700/50 rounded-xl p-4">
                 <p className="text-[10px] uppercase text-slate-500 font-bold mb-2 tracking-wider">
                   Текущий процесс
@@ -203,7 +292,6 @@ export default function InspectorPanel() {
                 </p>
               </div>
 
-              {/* СЕКРЕТНОЕ ДОСЬЕ (Новый блок) */}
               <div className="bg-slate-900/80 border border-slate-700/50 rounded-xl p-4 space-y-4">
                 <h3 className="text-[10px] uppercase text-slate-500 font-bold tracking-wider border-b border-slate-700/50 pb-2">
                   Секретное Досье
