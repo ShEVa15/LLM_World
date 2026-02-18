@@ -34,7 +34,8 @@
 bash
 cd backend
 python -m venv venv
-source venv/bin/activate  # Для Windows: venv\Scripts\activate
+source venv/bin/activate  
+Для Windows: venv\Scripts\activate
 pip install -r requirements.txt
 
 ## 2. Инициализация мира
