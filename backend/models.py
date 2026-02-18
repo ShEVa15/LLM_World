@@ -5,7 +5,7 @@ from database import Base
 class Agent(Base):
     __tablename__ = "agents"
 
-    # Строковый ID (ockham, christina, darius)
+
     id = Column(String, primary_key=True, index=True)
     name = Column(String, nullable=False)
     role = Column(String, nullable=False)
