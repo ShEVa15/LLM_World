@@ -5,7 +5,7 @@ import chromadb
 import google.generativeai as genai
 from chromadb.utils import embedding_functions
 
-# === 1. НАСТРОЙКИ GEMINI (Вставь ключ) ===
+
 GEMINI_API_KEY = "АПИ_КЛЮЧ_ГЕМИНИ"
 genai.configure(api_key=GEMINI_API_KEY)
 
@@ -30,7 +30,7 @@ model = genai.GenerativeModel(
     model_name="gemini-2.5-flash", 
     generation_config=genai.GenerationConfig(
         response_mime_type="application/json",
-        temperature=1.3, # Высокая креативность для живого сленга
+        temperature=1.3, 
         top_k=40,
         top_p=0.95,
     ),
@@ -39,7 +39,7 @@ model = genai.GenerativeModel(
 
 
 # === 2. ВЕКТОРНАЯ БАЗА (RAG) ===
-chroma_client = chromadb.PersistentClient(path="./chroma_db")  # Сохраняем на диск
+chroma_client = chromadb.PersistentClient(path="./chroma_db") 
 emb_fn = embedding_functions.DefaultEmbeddingFunction()
 collection = chroma_client.get_or_create_collection(
     name="agent_memories", embedding_function=emb_fn
@@ -53,7 +53,7 @@ def get_relevant_context(agent_id: str, query: str) -> str:
             query_texts=[query], n_results=1, where={"agent_id": agent_id}
         )
         if results["documents"] and len(results["documents"][0]) > 0:
-            return results["documents"][0][0]  # Возвращаем текст воспоминания
+            return results["documents"][0][0]  
         return ""
     except Exception as e:
         print(f"RAG Error: {e}")
@@ -83,7 +83,7 @@ async def generate_chat(agent_id: str, frontend_prompt: str, rag_context: str):
     """
     try:
         # --- СБОРКА СЛОЕВ 2 и 3 ---
-        # Мы явно указываем модели, где текущая ситуация, а где воспоминания
+
 
         final_user_message = f"""
         [CURRENT SITUATION / INCOMING DATA]:
@@ -95,13 +95,13 @@ async def generate_chat(agent_id: str, frontend_prompt: str, rag_context: str):
         Твоя реакция:
         """
 
-        # Отправляем в модель (System слой применится автоматически)
+   
         response = await model.generate_content_async(final_user_message)
 
-        # Парсим JSON
+       
         parsed = json.loads(response.text)
 
-        # Страховка: если модель вернула пустую реплику
+        
         if not parsed.get("reply"):
             parsed["reply"] = "..."
 
