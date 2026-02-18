@@ -1,6 +1,6 @@
 import json
 import asyncio
-import random # <--- НУЖЕН ДЛЯ ВЕРОЯТНОСТИ СПЛЕТЕН
+import random 
 from datetime import datetime
 from typing import List
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
@@ -26,7 +26,7 @@ RECENT_CHATS = []
 class WorldState(BaseModel):
     state_json: str
 
-# --- API ENDPOINTS (Оставляем как было) ---
+
 
 @app.get("/agents/", response_model=List[schemas.AgentResponse])
 async def list_agents():
@@ -70,17 +70,17 @@ async def websocket_endpoint(websocket: WebSocket):
                 agent_id, text = p["agentId"], p["promptText"]
                 print(f"[{agent_id}] Обработка события: {text[:30]}...")
                 
-                # 1. RAG + LLM
+              
                 context = memory.get_relevant_context(agent_id, text)
                 reply_text = await memory.generate_chat(agent_id, text, context)
                 
-                # 2. Сохраняем
+              
                 async with AsyncSessionLocal() as db:
                     db.add(models.ChatLog(agent_id=agent_id, prompt=text, reply=reply_text))
                     await db.commit()
                 memory.save_memory(agent_id, text, reply_text)
                 
-                # 3. Обновляем историю и шлем ответ
+              
                 chat_entry = {"agents": [agent_id], "text": reply_text, "time": datetime.now().strftime("%H:%M")}
                 RECENT_CHATS.insert(0, chat_entry)
                 if len(RECENT_CHATS) > 50: RECENT_CHATS.pop()
@@ -98,26 +98,26 @@ async def websocket_endpoint(websocket: WebSocket):
                 user_text = p.get("text") or p.get("promptText") or ""
                 print(f"[Player] Пишет: {user_text}")
 
-                # 1. Эхо сообщения игрока
+           
                 await websocket.send_text(json.dumps({
                     "type": "CHAT_MESSAGE",
                     "payload": {"senderId": "User", "text": user_text}
                 }))
 
-                # --- ИНИЦИАЛИЗАЦИЯ ЦЕПОЧКИ ---
+                
                 turn_count = 0
                 continue_chance = 1.0  
                 conversation_history = f"Тимлид: {user_text}"
                 
-                # Кто начнет? (Эвристика)
+           
                 txt_low = user_text.lower()
                 if any(x in txt_low for x in ["кристин", "фронт", "дизайн"]): current_speaker = "christina"
                 elif any(x in txt_low for x in ["дариус", "безопасн", "докер"]): current_speaker = "darius"
                 else: current_speaker = "ockham"
 
-                # Цикл "Цепная реакция" (Максимум 4 сообщения для экономии токенов и динамики)
+                
                 while turn_count < 4 and random.random() < continue_chance:
-                    # Уникальные промпты для живости
+                
                     if turn_count == 0:
                         prompt = f"Тимлид обратился к нам: '{user_text}'. Ответь ему в своей манере."
                     else:
@@ -126,13 +126,13 @@ async def websocket_endpoint(websocket: WebSocket):
                     context = memory.get_relevant_context(current_speaker, user_text)
                     reply = await memory.generate_chat(current_speaker, prompt, context)
 
-                    # Сохраняем в БД и память
+               
                     async with AsyncSessionLocal() as db:
                         db.add(models.ChatLog(agent_id=current_speaker, prompt=prompt[:100], reply=reply))
                         await db.commit()
                     memory.save_memory(current_speaker, user_text, reply)
 
-                    # Отправляем на фронт
+                  
                     await websocket.send_text(json.dumps({
                         "type": "CHAT_MESSAGE",
                         "payload": {"senderId": current_speaker, "text": reply}
@@ -140,7 +140,7 @@ async def websocket_endpoint(websocket: WebSocket):
 
                     conversation_history += f"\n{current_speaker}: {reply}"
 
-                    # Снижаем вероятность затягивания
+                
                     continue_chance = 0.8 if turn_count == 0 else continue_chance - 0.25
                     if continue_chance <= 0: break
 
@@ -157,18 +157,18 @@ async def websocket_endpoint(websocket: WebSocket):
                 # ==========================================
                 # Если ответил агент, другой может вмешаться с шансом 70%
                 if random.random() < 0.7:
-                    await asyncio.sleep(2) # Пауза
+                    await asyncio.sleep(2) 
                     
-                    # Выбираем второго (кто НЕ отвечал)
+                  
                     others = ["ockham", "christina", "darius"]
                     if responder_id in others: others.remove(responder_id)
                     interrupter_id = random.choice(others)
 
-                    # Промпт для вмешательства
+                   
                     banter_prompt = f"Коллега {responder_id} ответил Тимлиду: '{reply_1}'. Прокомментируй это (пошути или поспорь)."
                     reply_2 = await memory.generate_chat(interrupter_id, banter_prompt, "")
 
-                    # Отправляем комментарий второго
+              
                     await websocket.send_text(json.dumps({
                         "type": "CHAT_MESSAGE",
                         "payload": {"senderId": interrupter_id, "text": reply_2}
