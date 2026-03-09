@@ -52,7 +52,6 @@ async def load_world():
     except FileNotFoundError:
         return None
 
-# --- ГЛАВНЫЙ ЦИКЛ WEBSOCKET ---
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
@@ -62,9 +61,6 @@ async def websocket_endpoint(websocket: WebSocket):
             data = await websocket.receive_text()
             event = json.loads(data)
             
-            # ==========================================
-            # ВАРИАНТ 1: СИСТЕМНОЕ СОБЫТИЕ (Кнопки)
-            # ==========================================
             if event.get("type") == "ASK_LLM":
                 p = event["payload"]
                 agent_id, text = p["agentId"], p["promptText"]

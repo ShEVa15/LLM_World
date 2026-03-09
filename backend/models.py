@@ -18,3 +18,4 @@ class ChatLog(Base):
     prompt = Column(String)
     reply = Column(String)
     timestamp = Column(DateTime(timezone=True), server_default=func.now())
+    
